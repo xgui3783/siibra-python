@@ -58,11 +58,17 @@ class Region(anytree.NodeMixin):
         self.mapindex = mapindex
         self.attrs = attrs
         self.parent = parent
+        child_has_mapindex = False
         if children:
             self.children = children
             for c in self.children:
                 c.parent = self
                 c.parcellation = self.parcellation
+                if c.mapindex is not None:
+                    child_has_mapindex=True
+
+        if (self.mapindex is None) and (not child_has_mapindex):
+            self.mapindex=0
 
     @staticmethod
     def copy(other):
@@ -205,19 +211,23 @@ class Region(anytree.NodeMixin):
             return self==regionspec
         elif isinstance(regionspec,int):
             # argument is int - a labelindex is expected
-            if mapindex:
-                return all([self.labelindex==regionspec,self.mapindex==mapindex])
+            if mapindex is None:
+                return self.labelindex==regionspec
             else:
-                return all([self.labelindex==regionspec])
+                return all([self.labelindex==regionspec,self.mapindex==mapindex])
         elif isinstance(regionspec,str):
             # string is given, perform some lazy string matching
             words = splitstr(self.name.lower())
-            return any([
+            name_matches = any([
                     regionspec==self.key,
                     regionspec==self.name,
                     all([w.lower() in words 
                         for w in splitstr(regionspec)])
-                    ])
+                    ]) 
+            if mapindex is None:
+                return name_matches
+            else:
+                return name_matches and self.mapindex==mapindex
         else:
             raise TypeError(
                     "Cannot interpret region specification of type '{}'".format(
