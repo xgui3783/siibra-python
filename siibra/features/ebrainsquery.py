@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from memoization import cached
 import json
 from .feature import RegionalFeature
 from .extractor import FeatureExtractor
@@ -32,6 +33,7 @@ kg_feature_summary_kwargs={
 }
 
 KG_REGIONAL_FEATURE_SUMMARY_QUERY_NAME = 'siibra-kg-feature-summary-0.0.1'
+_SUMMARY_CACHE_FILENAME='ebrainsquery_summary_cache_name'
 
 class EbrainsRegionalDataset(RegionalFeature, ebrains.EbrainsDataset):
     def __init__(self, region, id, name, embargo_status):
@@ -41,11 +43,52 @@ class EbrainsRegionalDataset(RegionalFeature, ebrains.EbrainsDataset):
     def __str__(self):
         super(ebrains.EbrainsDataset, self)
 
-class EbrainsRegionalFeatureExtractor(FeatureExtractor):
-    _FEATURETYPE=EbrainsRegionalDataset
-    def __init__(self, atlas):
-        FeatureExtractor.__init__(self,atlas)
-        
+    @staticmethod
+    def preheat(parc_id: str = None):
+        json_resp=get_dataset()
+        from .. import parcellations
+
+        results = json_resp.get('results', []) 
+        if parc_id is not None:
+            p=parcellations[parc_id]
+            if p is not None:
+                _ = [datasets_to_features(r, r.get('datasets', []), parcellation=p) for r in results]
+        else:
+            _ = [datasets_to_features(r, r.get('datasets', []), parcellation=p) for p in parcellations for r in results ]
+
+@cached
+def datasets_to_features(reg, datasets, parcellation):
+    out = [dataset_to_feature(reg, ds, parcellation) for ds in datasets]
+    return [f for f in out if f is not None ]
+
+def dataset_to_feature(reg, dataset, parcellation):
+    ds_id = dataset.get('@id')
+    ds_name = dataset.get('name')
+    if not "dataset" in ds_id:
+        logger.debug(f"'{ds_name}' is not an interpretable dataset and will be skipped.\n(id:{ds_id})")
+        return None
+    regionname = reg.get('name', None)
+    try:
+        region = parcellation.decode_region(regionname)
+    except ValueError:
+        return None
+    return EbrainsRegionalDataset(region=region, id=ds_id, name=ds_name,
+        embargo_status=dataset.get('embargo_status'))
+
+_cached_dataset = None
+def get_dataset():
+    global _cached_dataset
+    if _cached_dataset is not None:
+        return _cached_dataset
+    try:
+        from .. import retrieval
+        cache=retrieval.get_cache(_SUMMARY_CACHE_FILENAME.encode('utf-8'))
+        result=json.loads(cache)
+        logger.debug(f"Retrieved cached ebrains results.")
+        _cached_dataset=result
+        return result
+    except FileNotFoundError:
+    
         # potentially, using ebrains_id is a lot quicker
         # but if user selects region with higher level of hierarchy, this benefit may be offset by numerous http calls
         # even if they were cached...
@@ -53,22 +96,30 @@ class EbrainsRegionalFeatureExtractor(FeatureExtractor):
 
         result=ebrains.execute_query_by_id(query_id=KG_REGIONAL_FEATURE_SUMMARY_QUERY_NAME,
             **ebrains.kg_feature_query_kwargs,**kg_feature_summary_kwargs)
+        
+        retrieval.save_cache(
+            _SUMMARY_CACHE_FILENAME.encode('utf-8'),
+            bytes(json.dumps(result).encode()))
+        logger.debug(f"Retrieved ebrain results via HTTP")
+        _cached_dataset=result
+        return result
 
-        for r in result.get('results', []):
-            for dataset in r.get('datasets', []):
-                ds_id = dataset.get('@id')
-                ds_name = dataset.get('name')
-                if not "dataset" in ds_id:
-                    logger.debug(f"'{ds_name}' is not an interpretable dataset and will be skipped.\n(id:{ds_id})")
-                    continue
-                regionname = r.get('name', None)
-                try:
-                    region = atlas.selected_parcellation.decode_region(regionname)
-                except ValueError as e:
-                    continue
-                feature = EbrainsRegionalDataset(region=region, id=ds_id, name=ds_name,
-                    embargo_status=dataset.get('embargo_status'))
-                self.register(feature)
+class EbrainsRegionalFeatureExtractor(FeatureExtractor):
+    _FEATURETYPE=EbrainsRegionalDataset
+    def __init__(self, **kwargs):
+        FeatureExtractor.__init__(self,**kwargs)
+
+        if self.parcellation is None:
+            raise ValueError('EbrainsRegionalFeatureExtractor requires parcellation as positional argument')
+
+        result=get_dataset()
+
+        results = result.get('results', []) 
+        features=[]
+        list_features=[datasets_to_features(r, r.get('datasets', []), parcellation=self.parcellation) for r in results]
+        for f in list_features:
+            features.extend(f)
+        self.register_many(features)
 
 
 def set_specs():

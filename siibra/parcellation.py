@@ -192,6 +192,7 @@ class Parcellation(HasOriginDataInfo):
         spaceobj = spaces[space]
         return spaceobj in self.volume_src.keys()
 
+    @cached
     def decode_region(self,regionspec:Union[str,int,ParcellationIndex,Region]):
         """
         Given a unique specification, return the corresponding region.

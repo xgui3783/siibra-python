@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from siibra import parcellation
+from memoization import cached
 from nibabel.affines import apply_affine
 from numpy import linalg as npl
 import numpy as np
@@ -25,6 +27,16 @@ from .config import ConfigurationRegistry
 from .space import Space
 
 VERSION_BLACKLIST_WORDS=["beta","rc","alpha"]
+
+@cached
+def get_extractors(modality, **kwargs):
+    
+    if modality not in features.extractor_types.modalities:
+        logger.error("Cannot query features - no feature extractor known "\
+                "for feature type {}.".format(modality))
+        return None
+
+    return [cls(**kwargs) for cls in features.extractor_types[modality]]
 
 class Atlas:
 
@@ -336,19 +348,11 @@ class Atlas:
         See siibra.features.modalities for available modalities.
         """
         hits = []
-
-        if modality not in features.extractor_types.modalities:
-            logger.error("Cannot query features - no feature extractor known "\
-                    "for feature type {}.".format(modality))
-            return hits
-
-        for cls in features.extractor_types[modality]:
-            if modality=='GeneExpression':
-                extractor = cls(self,kwargs['gene'])
-            else:
-                extractor = cls(self)
+        extractors = get_extractors(modality,
+            parcellation=kwargs.get('parcellation', self.selected_parcellation),
+            **kwargs)
+        for extractor in extractors:
             hits.extend(extractor.pick_selection(self))
-
         return hits
 
     def assign_coordinates(self,space:Space,xyz_mm,sigma_mm=3):
