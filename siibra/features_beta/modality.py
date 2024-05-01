@@ -13,4 +13,6 @@ def __dir__():
         return return_val
 
 def __getattr__(key: str):
+    if len(MODALITY_DIC) == 0:
+        __dir__()
     return MODALITY_DIC[key]

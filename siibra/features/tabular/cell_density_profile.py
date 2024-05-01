@@ -137,6 +137,7 @@ class CellDensityProfile(
     def layer_mask(self):
         """Generates a layer mask from boundary annotations."""
         if self._layer_mask is None:
+            
             self._layer_mask = np.zeros(np.array(self.shape).astype("int") + 1)
             for layer in range(1, 8):
                 pl = self.layer_annotation(layer)
