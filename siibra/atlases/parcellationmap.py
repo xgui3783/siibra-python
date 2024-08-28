@@ -185,7 +185,7 @@ class Map(AtlasElement):
             if frmt is None:
                 return True
             if frmt in ["image", "mesh"]:
-                vol.format in self.formats and vol.format in FORMAT_LOOKUP[frmt]
+                return vol.format in FORMAT_LOOKUP[frmt]
             return vol.format == frmt
 
         if region is None:
@@ -419,7 +419,9 @@ class Map(AtlasElement):
                         )
                     else:
                         assignments.append(
-                            Map.RegionAssignment(**{**asdict(assgnmt), "region": region})
+                            Map.RegionAssignment(
+                                **{**asdict(assgnmt), "region": region}
+                            )
                         )
 
         return Map._convert_assignments_to_dataframe(assignments)
