@@ -39,9 +39,9 @@ class Configuration:
             GithubRepository,  # Cls of repository to be used
             [],  # args
             dict(
-                owner="FZJ-INM1-BDA",  # kwargs
+                owner="xgui3783",  # kwargs
                 repo="siibra-configurations",
-                reftag="refactor_attr",
+                reftag="tmp_sapi",
                 eager=True,
             ),
         )
